@@ -501,7 +501,7 @@ public:
     [[nodiscard]] LogStoreFamily& get_family() { return m_logstore_family; }
 
     [[nodiscard]] nlohmann::json dump_log_store(const log_dump_req& dump_req = log_dump_req());
-    [[nodiscard]] sisl::status_response get_status(const sisl::status_request& request);
+    [[nodiscard]] sisl::status_response get_status(const sisl::status_request& request) const;
 
 private:
     [[nodiscard]] const truncation_info& pre_device_truncation();

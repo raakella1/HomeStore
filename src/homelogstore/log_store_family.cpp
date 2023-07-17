@@ -32,7 +32,7 @@ SISL_LOGGING_DECL(logstore)
 
 LogStoreFamily::LogStoreFamily(const logstore_family_id_t f_id) :
         m_family_id{f_id},
-        m_metablk_name{std::string("LogStoreFamily") + std::to_string(f_id)},
+        m_metablk_name{std::string("LogDevFamily") + std::to_string(f_id)},
         m_log_dev{f_id, m_metablk_name} {}
 
 void LogStoreFamily::meta_blk_found_cb(meta_blk* const mblk, const sisl::byte_view buf, const size_t size) {
@@ -300,10 +300,10 @@ nlohmann::json LogStoreFamily::dump_log_store(const log_dump_req& dump_req) {
     return json_dump;
 }
 
-std::shared_ptr< HomeLogStore > LogStoreFamily::find_logstore_by_id(logstore_id_t store_id) {
+std::shared_ptr< HomeLogStore > LogStoreFamily::find_logstore_by_id(logstore_id_t store_id){
     auto m{m_id_logstore_map.rlock()};
     auto it{m->find(store_id)};
-    if (it == m->end()) return nullptr;
+    if(it == m->end()) return nullptr;
     return it->second.m_log_store;
 }
 

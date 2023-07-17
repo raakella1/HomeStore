@@ -805,7 +805,6 @@ std::string VirtualDev::to_string() const {
 sisl::status_response VirtualDev::get_status(const sisl::status_request& request) const {
     sisl::status_response response;
     response.json["vdev"] = to_string();
-    
     try {
         for (const auto& pdev_chunks : m_primary_pdev_chunks_list) {
             const auto chunk_list{pdev_chunks.chunks_in_pdev};

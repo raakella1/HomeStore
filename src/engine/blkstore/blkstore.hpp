@@ -253,10 +253,9 @@ public:
     sisl::sobject_ptr sobject() { return m_sobject; }
     void init_sobject() {
         auto hs = HomeStoreBase::safe_instance();
-        if (hs) {
-            m_sobject = hs->sobject_mgr()->create_object("module", "BlkStore",
-                                                         std::bind(&BlkStore::get_status, this, std::placeholders::_1));
-        }
+        m_sobject = hs->sobject_mgr()->create_object("module", "BlkStore",
+                                      std::bind(&BlkStore::get_status, this, std::placeholders::_1));
+        
     }
 
     void attach_compl(comp_callback comp_cb) { m_comp_cb = std::move(comp_cb); }

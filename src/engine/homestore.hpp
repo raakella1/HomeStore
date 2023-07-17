@@ -69,8 +69,8 @@ public:
 
         sisl::ObjCounterRegistry::enable_metrics_reporting();
         ioenvironment.with_object_manager();
-        m_sobject =
-            sobject_mgr()->create_object("module", "HomeStore", std::bind(&HomeStore::get_status, this, std::placeholders::_1));
+        m_sobject = sobject_mgr()->create_object("module", "HomeStore",
+                                  std::bind(&HomeStore::get_status, this, std::placeholders::_1));
 
         MetaBlkMgrSI()->register_handler("INDX_MGR_CP", StaticIndxMgr::meta_blk_found_cb, nullptr);
 
@@ -238,7 +238,6 @@ protected:
         m_index_blk_store->create_object();
         m_ctrl_logdev_blk_store->create_object();
         m_data_logdev_blk_store->create_object();
-        
         init_done(first_time_boot);
     }
 

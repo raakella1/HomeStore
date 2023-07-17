@@ -377,7 +377,7 @@ logstore_seq_num_t HomeLogStore::get_contiguous_completed_seq_num(const logstore
     return (logstore_seq_num_t)m_records.completed_upto(from + 1);
 }
 
-sisl::status_response HomeLogStore::get_status(const sisl::status_request& request) {
+sisl::status_response HomeLogStore::get_status(const sisl::status_request& request) const {
     sisl::status_response response;
     response.json["append_mode"] = m_append_mode;
     response.json["highest_lsn"] = m_seq_num.load(std::memory_order_relaxed);
@@ -388,7 +388,6 @@ sisl::status_response HomeLogStore::get_status(const sisl::status_request& reque
     response.json["truncation_parallel_to_writes?"] = m_safe_truncation_boundary.active_writes_not_part_of_truncation;
     response.json["logstore_records"] = m_records.get_status(request.verbose_level);
     response.json["logstore_sb_first_lsn"] = m_logdev.m_logdev_meta.store_superblk(m_store_id).m_first_seq_num;
-
     return response;
 }
 
