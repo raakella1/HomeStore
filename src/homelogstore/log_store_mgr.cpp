@@ -55,13 +55,11 @@ void HomeLogStoreMgr::ctrl_meta_blk_found_cb(meta_blk* const mblk, const sisl::b
 void HomeLogStoreMgr::start(const bool format) {
     m_hb = HomeStoreBase::safe_instance();
     m_sobject = m_hb->sobject_mgr()->create_object(
-        "module", "HomeLogStoreMgr", std::bind(&HomeLogStoreMgr::get_status, this, std::placeholders::_1));
+        "module", "LogStore", std::bind(&HomeLogStoreMgr::get_status, this, std::placeholders::_1));
 
     // Start the logstore families
     m_logstore_families[DATA_LOG_FAMILY_IDX]->start(format, m_hb->get_data_logdev_blkstore());
     m_logstore_families[CTRL_LOG_FAMILY_IDX]->start(format, m_hb->get_ctrl_logdev_blkstore());
-    m_sobject->add_child(m_logstore_families[DATA_LOG_FAMILY_IDX]->sobject());
-    m_sobject->add_child(m_logstore_families[CTRL_LOG_FAMILY_IDX]->sobject());
 
     // Create an truncate thread loop which handles truncation which does sync IO
     start_threads();
@@ -179,7 +177,11 @@ nlohmann::json HomeLogStoreMgr::dump_log_store(const log_dump_req& dump_req) {
 }
 
 sisl::status_response HomeLogStoreMgr::get_status(const sisl::status_request& request) const {
-    return {};
+    sisl::status_response response;
+    for (auto& l : m_logstore_families) {
+        response.json[l->get_name()] = l->get_status(request).json;
+    }
+    return response;
 }
 
 HomeLogStoreMgrMetrics::HomeLogStoreMgrMetrics() : sisl::MetricsGroup("LogStores", "AllLogStores") {

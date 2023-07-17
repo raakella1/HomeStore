@@ -502,7 +502,6 @@ public:
 
     [[nodiscard]] nlohmann::json dump_log_store(const log_dump_req& dump_req = log_dump_req());
     [[nodiscard]] sisl::status_response get_status(const sisl::status_request& request);
-    sisl::sobject_ptr sobject() { return m_sobject; }
 
 private:
     [[nodiscard]] const truncation_info& pre_device_truncation();
@@ -533,7 +532,6 @@ private:
 
     std::vector< seq_ld_key_pair > m_truncation_barriers; // List of truncation barriers
     truncation_info m_safe_truncation_boundary;
-    sisl::sobject_ptr m_sobject;
 };
 
 #pragma pack(1)

@@ -33,11 +33,7 @@ SISL_LOGGING_DECL(logstore)
 LogStoreFamily::LogStoreFamily(const logstore_family_id_t f_id) :
         m_family_id{f_id},
         m_metablk_name{std::string("LogStoreFamily") + std::to_string(f_id)},
-        m_log_dev{f_id, m_metablk_name} {
-    auto hb = HomeStoreBase::safe_instance();
-    m_sobject = hb->sobject_mgr()->create_object("LogStoreFamily", m_metablk_name,
-                                                 std::bind(&LogStoreFamily::get_status, this, std::placeholders::_1));
-}
+        m_log_dev{f_id, m_metablk_name} {}
 
 void LogStoreFamily::meta_blk_found_cb(meta_blk* const mblk, const sisl::byte_view buf, const size_t size) {
     m_log_dev.meta_blk_found(mblk, buf, size);
@@ -97,7 +93,6 @@ std::shared_ptr< HomeLogStore > LogStoreFamily::create_new_log_store(const bool 
     HS_REL_ASSERT((it == m->end()), "store_id {}-{} already exists", m_family_id, store_id);
 
     m->insert(std::make_pair<>(store_id, logstore_info_t{lstore, nullptr, append_mode}));
-    m_sobject->add_child(lstore->sobject());
 
     LOGINFO("Created log store id {}-{}", m_family_id, store_id);
     return lstore;
@@ -160,7 +155,6 @@ void LogStoreFamily::on_log_store_found(const logstore_id_t store_id, const logs
     auto& l_info{const_cast< logstore_info_t& >(it->second)};
     l_info.m_log_store = std::make_shared< HomeLogStore >(*this, store_id, l_info.append_mode, sb.m_first_seq_num);
     if (l_info.m_on_log_store_opened) l_info.m_on_log_store_opened(l_info.m_log_store);
-    m_sobject->add_child(l_info.m_log_store->sobject());
 }
 
 static thread_local std::vector< std::shared_ptr< HomeLogStore > > s_cur_flush_batch_stores;
@@ -323,6 +317,17 @@ sisl::status_response LogStoreFamily::get_status(const sisl::status_request& req
 
     // Logdev status
     response.json["log_dev"] = m_log_dev.get_status(request).json;
+
+    // All logstores in range [lower_logstore_id, higher_logstore_id] if range is provided
+    logstore_id_t lower_logstore_id = (request.json.contains("min_logstore_id")) ? static_cast<logstore_id_t > (std::stoul(request.json["min_logstore_id"].get<std::string>())) : 0;
+    logstore_id_t higher_logstore_id = (request.json.contains("max_logstore_id")) ? static_cast<logstore_id_t > (std::stoul(request.json["max_logstore_id"].get<std::string>())): UINT32_MAX;
+    m_id_logstore_map.withRLock([&](auto& id_logstore_map) {
+        for (const auto& [id, lstore] : id_logstore_map) {
+            if(id >= lower_logstore_id && id <= higher_logstore_id)
+            response.json["logstore_id_" + std::to_string(id)] = lstore.m_log_store->get_status(request).json;
+        }
+    });
+    
     return response;
 }
 } // namespace homestore

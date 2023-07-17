@@ -75,7 +75,6 @@ public:
     LogDev& logdev() { return m_log_dev; }
 
     sisl::status_response get_status(const sisl::status_request& request) const;
-    sisl::sobject_ptr sobject() { return m_sobject; }
 
     std::string get_name() const { return m_metablk_name; }
 
@@ -100,6 +99,5 @@ public:
     logstore_family_id_t m_family_id;
     std::string m_metablk_name;
     LogDev m_log_dev;
-    sisl::sobject_ptr m_sobject;
 };
 } // namespace homestore
