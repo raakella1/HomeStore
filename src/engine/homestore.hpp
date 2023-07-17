@@ -231,6 +231,14 @@ protected:
             create_index_blkstore(nullptr);
             create_data_blkstore(nullptr);
         }
+
+        // for both first_time_boot and recovery case, create the object;
+        m_meta_blk_store->create_object();
+        m_data_blk_store->create_object();
+        m_index_blk_store->create_object();
+        m_ctrl_logdev_blk_store->create_object();
+        m_data_logdev_blk_store->create_object();
+        
         init_done(first_time_boot);
     }
 

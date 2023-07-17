@@ -373,7 +373,7 @@ IndxMgr::IndxMgr(const boost::uuids::uuid uuid, std::string name, const io_done_
 
     auto hs = HomeStoreBase::safe_instance();
     m_sobject =
-        hs->sobject_mgr()->create_object("index", name, std::bind(&IndxMgr::get_status, this, std::placeholders::_1));
+        hs->sobject_mgr()->create_object("index", "index_" + name, std::bind(&IndxMgr::get_status, this, std::placeholders::_1));
 
     THIS_INDX_LOG(INFO, indx_mgr, , "Creating new log store for name: {}", name);
     m_journal = HomeLogStoreMgrSI().create_new_log_store(HomeLogStoreMgr::DATA_LOG_FAMILY_IDX, false /* append_mode */);
@@ -405,7 +405,7 @@ IndxMgr::IndxMgr(const boost::uuids::uuid uuid, std::string name, const io_done_
 
     auto hs = HomeStoreBase::safe_instance();
     m_sobject =
-        hs->sobject_mgr()->create_object("index", name, std::bind(&IndxMgr::get_status, this, std::placeholders::_1));
+        hs->sobject_mgr()->create_object("index", "index_" + name, std::bind(&IndxMgr::get_status, this, std::placeholders::_1));
 
     HS_REL_ASSERT_EQ(m_immutable_sb.version, indx_sb_version);
     m_is_snap_enabled = sb.is_snap_enabled ? true : false;
