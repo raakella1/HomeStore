@@ -165,6 +165,10 @@ public:
 
     virtual uint32_t get_blk_size() const = 0;
 
+    ///@brief Get the list of replica configs for the given group id
+    ///@param group_id Group id interested in
+    virtual void get_replica_configs(std::list< replica_config >& replica_configs) const = 0;
+
 protected:
     std::unique_ptr< ReplDevListener > m_listener;
 };

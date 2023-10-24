@@ -200,9 +200,15 @@ public:
         m_uuid1 = hs_utils::gen_random_uuid();
         m_uuid2 = hs_utils::gen_random_uuid();
         m_repl_dev1 =
-            hs()->repl_service().create_repl_dev(m_uuid1, {}, std::make_unique< Listener >(*this)).get().value();
+            hs()->repl_service()
+                .create_repl_dev(m_uuid1, std::set< std::string, std::less<> >{}, std::make_unique< Listener >(*this))
+                .get()
+                .value();
         m_repl_dev2 =
-            hs()->repl_service().create_repl_dev(m_uuid2, {}, std::make_unique< Listener >(*this)).get().value();
+            hs()->repl_service()
+                .create_repl_dev(m_uuid2, std::set< std::string, std::less<> >{}, std::make_unique< Listener >(*this))
+                .get()
+                .value();
     }
 
     virtual void TearDown() override {

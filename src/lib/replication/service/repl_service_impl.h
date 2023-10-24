@@ -62,6 +62,9 @@ public:
     AsyncReplResult< shared< ReplDev > > create_repl_dev(uuid_t group_id,
                                                          std::set< std::string, std::less<> >&& members,
                                                          std::unique_ptr< ReplDevListener > listener) override;
+    AsyncReplResult< shared< ReplDev > > create_repl_dev(uuid_t group_id,
+                                                         std::set< replica_config, std::less<> >&& member_configs,
+                                                         std::unique_ptr< ReplDevListener > listener) override;
     AsyncReplResult< shared< ReplDev > > open_repl_dev(uuid_t group_id,
                                                        std::unique_ptr< ReplDevListener > listener) override;
     ReplResult< shared< ReplDev > > get_repl_dev(uuid_t group_id) const override;
@@ -69,6 +72,8 @@ public:
 
     folly::Future< ReplServiceError > replace_member(uuid_t group_id, std::string const& member_out,
                                                      std::string const& member_in) const override;
+
+    void get_replica_configs(uuid_t group_id, std::list< replica_config >& replica_configs) const override;
 
 private:
     shared< ReplDev > create_repl_dev_instance(superblk< repl_dev_superblk > const& rd_sb, bool load_existing);

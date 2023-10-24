@@ -126,6 +126,10 @@ void SoloReplDev::async_free_blks(int64_t, MultiBlkId const& bid) { data_service
 
 uint32_t SoloReplDev::get_blk_size() const { return data_service().get_blk_size(); }
 
+void SoloReplDev::get_replica_configs(std::list< replica_config >& replica_configs) const {
+    // No replica configs for solo repl dev
+}
+
 void SoloReplDev::cp_flush(CP*) {
     auto lsn = m_commit_upto.load();
     m_rd_sb->commit_lsn = lsn;

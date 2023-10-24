@@ -87,6 +87,8 @@ public:
 
     uint32_t get_blk_size() const override;
 
+    void get_replica_configs(std::list< replica_config >& replica_configs) const override;
+
     void cp_flush(CP* cp);
     void cp_cleanup(CP* cp);
 

@@ -47,7 +47,7 @@ void ReplicationServiceImpl::stop() {
 }
 
 AsyncReplResult< shared< ReplDev > >
-ReplicationServiceImpl::create_repl_dev(uuid_t group_id, std::set< std::string, std::less<> >&& members,
+ReplicationServiceImpl::create_repl_dev(uuid_t group_id, std::set< replica_config, std::less<> >&& member_configs,
                                         std::unique_ptr< ReplDevListener > listener) {
     superblk< repl_dev_superblk > rd_sb{"repl_dev"};
     rd_sb.create(sizeof(repl_dev_superblk));
@@ -58,6 +58,16 @@ ReplicationServiceImpl::create_repl_dev(uuid_t group_id, std::set< std::string, 
     repl_dev->attach_listener(std::move(listener));
     rd_sb.write();
     return make_async_success(std::move(repl_dev));
+}
+
+AsyncReplResult< shared< ReplDev > >
+ReplicationServiceImpl::create_repl_dev(uuid_t group_id, std::set< std::string, std::less<> >&& members,
+                                        std::unique_ptr< ReplDevListener > listener) {
+    std::set< replica_config, std::less<> > member_configs;
+    for (auto const& member : members) {
+        member_configs.emplace(replica_config{.member_id = member, .aux = ""});
+    }
+    return create_repl_dev(group_id, std::move(member_configs), std::move(listener));
 }
 
 AsyncReplResult< shared< ReplDev > >
@@ -103,6 +113,11 @@ void ReplicationServiceImpl::iterate_repl_devs(std::function< void(cshared< Repl
 folly::Future< ReplServiceError > ReplicationServiceImpl::replace_member(uuid_t group_id, std::string const& member_out,
                                                                          std::string const& member_in) const {
     return folly::makeFuture< ReplServiceError >(ReplServiceError::NOT_IMPLEMENTED);
+}
+
+void ReplicationServiceImpl::get_replica_configs(uuid_t group_id, std::list< replica_config >& replica_configs) const {
+    std::shared_lock lg(m_rd_map_mtx);
+    if (auto it = m_rd_map.find(group_id); it != m_rd_map.end()) { it->second->get_replica_configs(replica_configs); }
 }
 
 shared< ReplDev > ReplicationServiceImpl::create_repl_dev_instance(superblk< repl_dev_superblk > const& rd_sb,

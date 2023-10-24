@@ -29,6 +29,18 @@ VENUM(ReplServiceError, int32_t,
       FAILED = -32768);
 // clang-format on
 
+// struct to capture the config of a replica.
+// currently includes member id and an auxiliary string that will be replicated as a part of the cluster config
+struct replica_config {
+    std::string member_id;
+    std::string aux;
+
+    // the operator < is insignificant for the replication service, but is required for the std::set
+    friend bool operator<(const replica_config& lhs, const replica_config& rhs) {
+        return lhs.member_id < rhs.member_id;
+    }
+};
+
 class ReplDev;
 class ReplDevListener;
 
@@ -58,6 +70,15 @@ public:
                                                                  std::set< std::string, std::less<> >&& members,
                                                                  std::unique_ptr< ReplDevListener > listener) = 0;
 
+    /// @brief Creates the Repl Device to which eventually user can read locally and write to the quorom of the members
+    /// @param group_id Unique ID indicating the group
+    /// @param member_configs List of replica configs to form this group
+    /// @param listener state machine listener of all the events happening on the repl_dev (commit, precommit etc)
+    /// @return A Future ReplDev on success or Future ReplServiceError upon error
+    virtual AsyncReplResult< shared< ReplDev > >
+    create_repl_dev(uuid_t group_id, std::set< replica_config, std::less<> >&& member_configs,
+                    std::unique_ptr< ReplDevListener > listener) = 0;
+
     /// @brief Opens the Repl Device for a given group id. It is expected that the repl dev is already created and used
     /// this method for recovering. It is possible that repl_dev is not ready and in that case it will provide Repl
     /// Device after it is ready and thus returns a Future.
@@ -84,5 +105,9 @@ public:
     /// @brief Iterate over all repl devs and then call the callback provided
     /// @param cb Callback with repl dev
     virtual void iterate_repl_devs(std::function< void(cshared< ReplDev >&) > const& cb) = 0;
+
+    ///@brief Get the list of replica configs for the given group id
+    ///@param group_id Group id interested in
+    virtual void get_replica_configs(uuid_t group_id, std::list< replica_config >& replica_configs) const = 0;
 };
 } // namespace homestore
