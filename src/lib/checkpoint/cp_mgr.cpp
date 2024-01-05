@@ -78,7 +78,6 @@ void CPManager::shutdown() {
     auto cp = get_cur_cp();
     delete (cp);
     rcu_xchg_pointer(&m_cur_cp, nullptr);
-    m_metrics.reset();
     if (m_wd_cp) {
         m_wd_cp->stop();
         m_wd_cp.reset();
