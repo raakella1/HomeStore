@@ -2,7 +2,6 @@
 #include <flatbuffers/minireflect.h>
 #include <folly/executors/InlineExecutor.h>
 #include <iomgr/iomgr_flip.hpp>
-#include <boost/lexical_cast.hpp>
 
 #include <sisl/fds/buffer.hpp>
 #include <sisl/grpc/generic_service.hpp>
@@ -13,6 +12,7 @@
 
 #include "common/homestore_assert.hpp"
 #include "common/homestore_config.hpp"
+#include "common/homestore_utils.hpp"
 // #include "common/homestore_flip.hpp"
 #include "replication/service/raft_repl_service.h"
 #include "replication/repl_dev/raft_repl_dev.h"
@@ -701,14 +701,14 @@ bool RaftReplDev::is_leader() const { return m_repl_svc_ctx->is_raft_leader(); }
 
 const replica_id_t RaftReplDev::get_leader_id() const {
     auto leader = m_repl_svc_ctx->raft_leader_id();
-    return boost::lexical_cast< replica_id_t >(leader);
+    return hs_utils::to_uuid(leader);
 }
 
 std::vector< peer_info > RaftReplDev::get_replication_status() const {
     std::vector< peer_info > pi;
     auto rep_status = m_repl_svc_ctx->get_raft_status();
     for (auto const& pinfo : rep_status) {
-        pi.emplace_back(peer_info{.id_ = boost::lexical_cast< replica_id_t >(pinfo.id_),
+        pi.emplace_back(peer_info{.id_ = hs_utils::to_uuid(pinfo.id_),
                                   .replication_idx_ = pinfo.last_log_idx_,
                                   .last_succ_resp_us_ = pinfo.last_succ_resp_us_});
     }

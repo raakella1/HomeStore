@@ -14,6 +14,7 @@
  *
  *********************************************************************************/
 #include <boost/uuid/random_generator.hpp>
+#include <boost/lexical_cast.hpp>
 #include "homestore_utils.hpp"
 #include "homestore_assert.hpp"
 
@@ -31,6 +32,16 @@ uint8_t* hs_utils::iobuf_alloc(const size_t size, const sisl::buftag tag, const 
 }
 
 uuid_t hs_utils::gen_random_uuid() { return boost::uuids::random_generator()(); }
+
+uuid_t hs_utils::to_uuid(const std::string& str) {
+    uuid_t uuid_str;
+    try {
+        uuid_str = boost::lexical_cast< uuid_t >(str);
+    } catch (boost::bad_lexical_cast const&) {
+        // LOG
+    }
+    return uuid_str;
+}
 
 void hs_utils::iobuf_free(uint8_t* const ptr, const sisl::buftag tag) {
     if (tag == sisl::buftag::btree_node) {
