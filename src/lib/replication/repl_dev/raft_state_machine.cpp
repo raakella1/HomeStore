@@ -3,6 +3,7 @@
 #include <sisl/fds/utils.hpp>
 #include <sisl/fds/vector_pool.hpp>
 
+#include <homestore/blkdata_service.hpp>
 #include "service/raft_repl_service.h"
 #include "repl_dev/raft_state_machine.h"
 #include "repl_dev/raft_repl_dev.h"
@@ -120,11 +121,18 @@ repl_req_ptr_t RaftStateMachine::transform_journal_entry(nuraft::ptr< nuraft::lo
     RD_LOG(DEBUG, "Received Raft server_id={}, term={}, dsn={}, journal_entry=[{}] ", jentry->server_id,
            lentry->get_term(), jentry->dsn, jentry->to_string());
 
+    auto data_size = jentry->value_size;
+    if (jentry->code == journal_type_t::HS_LARGE_DATA) {
+        MultiBlkId entry_blkid;
+        entry_blkid.deserialize(sisl::blob{key.cbytes() + key.size(), jentry->value_size}, true /* copy */);
+        data_size = entry_blkid.blk_count() * data_service().get_blk_size();
+    }
+
     // From the repl_key, get the repl_req. In cases where log stream got here first, this method will create a new
     // repl_req and return that back. Fill up all of the required journal entry inside the repl_req
     auto rreq = m_rd.applier_create_req(
         repl_key{.server_id = jentry->server_id, .term = lentry->get_term(), .dsn = jentry->dsn}, header, key,
-        jentry->value_size);
+        data_size);
     rreq->journal_buf = std::move(log_buf);
     rreq->journal_entry = jentry;
 
