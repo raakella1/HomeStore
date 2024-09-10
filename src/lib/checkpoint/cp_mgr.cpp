@@ -219,11 +219,17 @@ void CPManager::cp_start_flush(CP* cp) {
     HS_PERIODIC_LOG(INFO, cp, "Starting CP {} flush", cp->id());
     cp->m_cp_status = cp_status_t::cp_flushing;
 
+    size_t idx{0};
     for (auto& consumer : m_cp_cb_table) {
-        if (consumer) { futs.emplace_back(std::move(consumer->cp_flush(cp))); }
+        auto consumer_type = static_cast< cp_consumer_t >(idx);
+        if (consumer && consumer_type != cp_consumer_t::REPLICATION_SVC) {
+            futs.emplace_back(std::move(consumer->cp_flush(cp)));
+        }
+        ++idx;
     }
 
     folly::collectAllUnsafe(futs).thenValue([this, cp](auto) {
+        m_cp_cb_table[static_cast< size_t >(cp_consumer_t::REPLICATION_SVC)]->cp_flush(cp).get();
         // All consumers have flushed for the cp
         on_cp_flush_done(cp);
     });
