@@ -473,6 +473,11 @@ public:
 
         auto wb_req = to_wb_req(bs_req);
         const size_t cp_id = wb_req->bcp->cp_id % MAX_CP_CNT;
+        
+        // we are done with this wb_req
+        HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
+        wb_req->bn->req[cp_id] = nullptr;
+
         wb_req->state = homeds::btree::writeback_req_state::WB_REQ_COMPL;
 
         --wb_cache_outstanding_cnt;
@@ -533,9 +538,6 @@ public:
         }
         ResourceMgrSI().dec_dirty_buf_cnt(m_node_size);
 
-        // we are done with this wb_req
-        HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
-        wb_req->bn->req[cp_id] = nullptr;
         /* req and btree node are pointing to each other which is preventing neither of them to be freed */
         wb_req->bn = nullptr;
 
