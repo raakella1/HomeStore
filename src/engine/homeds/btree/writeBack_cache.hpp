@@ -357,12 +357,14 @@ public:
 
         if (bn->bcp->cp_id > bcp->cp_id) { return btree_status_t::cp_mismatch; }
 
+        /*
         const size_t prev_cp_id{static_cast< size_t >((bcp->cp_id - 1)) % MAX_CP_CNT};
         auto req{bn->req[prev_cp_id]};
         if (!req || req->state == writeback_req_state::WB_REQ_COMPL) {
             // req on last cp is already completed. No need to make copy
             return btree_status_t::success;
         }
+        */
 
         // make a copy
         // TO DO: Possible alignment
@@ -439,10 +441,6 @@ public:
                     ++wb_cache_outstanding_cnt;
                     shared_this->m_blkstore->write(wb_req->bid, wb_req->m_mem, 0, wb_req, false);
                     ++write_count;
-
-                    // we are done with this wb_req
-                    HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
-                    wb_req->bn->req[cp_id] = nullptr;
 
                     if (wb_cache_outstanding_cnt > ResourceMgrSI().get_dirty_buf_qd()) {
                         CP_PERIODIC_LOG(
@@ -537,6 +535,10 @@ public:
             queue_flush_buffers(nullptr);
         }
         ResourceMgrSI().dec_dirty_buf_cnt(m_node_size);
+
+        // we are done with this wb_req
+        HS_REL_ASSERT_EQ(wb_req, wb_req->bn->req[cp_id]);
+        wb_req->bn->req[cp_id] = nullptr;
         /* req and btree node are pointing to each other which is preventing neither of them to be freed */
         wb_req->bn = nullptr;
 
