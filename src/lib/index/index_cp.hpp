@@ -15,7 +15,7 @@
  *********************************************************************************/
 #pragma once
 #include <atomic>
-#include <sisl/fds/concurrent_insert_vector.hpp>
+#include <sisl/fds/thread_vector.hpp>
 #include <homestore/blk.h>
 #include <homestore/index/index_internal.hpp>
 #include <homestore/index_service.hpp>
@@ -137,10 +137,10 @@ public:
 public:
     std::atomic< uint64_t > m_num_nodes_added{0};
     std::atomic< uint64_t > m_num_nodes_removed{0};
-    sisl::ConcurrentInsertVector< IndexBufferPtr > m_dirty_buf_list;
+    sisl::ThreadVector< IndexBufferPtr > m_dirty_buf_list;
     sisl::atomic_counter< int64_t > m_dirty_buf_count{0};
     std::mutex m_flush_buffer_mtx;
-    sisl::ConcurrentInsertVector< IndexBufferPtr >::iterator m_dirty_buf_it;
+    sisl::thread_vector_iterator m_dirty_buf_it;
 
     iomgr::FiberManagerLib::mutex m_txn_journal_mtx;
     sisl::io_blob_safe m_txn_journal_buf;
@@ -163,6 +163,7 @@ public:
     std::optional< IndexBufferPtr > next_dirty();
     std::string to_string();
     std::string to_string_small();
+    std::string to_string_dirty_list();
     std::string to_string_with_dags();
     uint16_t num_dags();
     void to_string_dot(const std::string& filename);

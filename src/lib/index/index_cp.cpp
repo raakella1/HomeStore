@@ -22,6 +22,15 @@ void IndexCPCallbacks::cp_cleanup(CP* cp) {}
 
 int IndexCPCallbacks::cp_progress_percent() { return 100; }
 
+// helper for iterating through sisl::ThreadVector
+#define foreach_entry(vec, cb) \
+    { \
+        auto it = (vec).begin(true); \
+        for (auto* entry = (vec).next(it); entry != nullptr; entry = (vec).next(it)) { \
+            cb(*entry); \
+        } \
+    }
+
 /////////////////////// IndexCPContext section ///////////////////////////
 IndexCPContext::IndexCPContext(CP* cp) : VDevCPContext(cp) {}
 
@@ -65,6 +74,7 @@ void IndexCPContext::add_to_txn_journal(uint32_t index_ordinal, const IndexBuffe
 }
 
 void IndexCPContext::add_to_dirty_list(const IndexBufferPtr& buf) {
+    LOGINFO("Adding buffer {} to dirty list for cp {}", buf->to_string(), m_cp->id());
     m_dirty_buf_list.push_back(buf);
     buf->set_state(index_buf_state_t::DIRTY);
     m_dirty_buf_count.increment(1);
@@ -72,18 +82,31 @@ void IndexCPContext::add_to_dirty_list(const IndexBufferPtr& buf) {
 
 bool IndexCPContext::any_dirty_buffers() const { return !m_dirty_buf_count.testz(); }
 
-void IndexCPContext::prepare_flush_iteration() { m_dirty_buf_it = m_dirty_buf_list.begin(); }
+void IndexCPContext::prepare_flush_iteration() { 
+    m_dirty_buf_it = m_dirty_buf_list.begin(true /* latest */);
+}
 
 std::optional< IndexBufferPtr > IndexCPContext::next_dirty() {
-    if (m_dirty_buf_it == m_dirty_buf_list.end()) { return std::nullopt; }
-    IndexBufferPtr ret = *m_dirty_buf_it;
-    ++m_dirty_buf_it;
-    return ret;
+    IndexBufferPtr* next_dirty_ref = m_dirty_buf_list.next(m_dirty_buf_it);
+    if (!next_dirty_ref) { return std::nullopt; }
+    LOGINFO("Next dirty buffer for cp {} is {}", m_cp->id(), (*next_dirty_ref)->to_string());
+    return *next_dirty_ref;
 }
 
 std::string IndexCPContext::to_string_small() {
     return fmt::format("IndexCPContext cpid={}, dirty_buf_count={}, dirty_buf_list_size={}", m_cp->id(),
                        m_dirty_buf_count.get(), m_dirty_buf_list.size());
+}
+
+std::string IndexCPContext::to_string_dirty_list() {
+    std::string str = fmt::format("IndexCPContext cpid={}, dirty_buf_count={}, dirty_buf_list_size={}", m_cp->id(),
+                       m_dirty_buf_count.get(), m_dirty_buf_list.size());
+    auto to_string_cb = [&str](IndexBufferPtr buf) {
+        fmt::format_to(std::back_inserter(str), "{}", buf->to_string());
+        fmt::format_to(std::back_inserter(str), "\n");
+    };
+    foreach_entry(m_dirty_buf_list, to_string_cb);
+    return str;
 }
 
 std::string IndexCPContext::to_string() {
@@ -93,13 +116,13 @@ std::string IndexCPContext::to_string() {
     // Mapping from a node to all its parents in the graph.
     // Display all buffers and its dependencies and state.
     std::unordered_map< IndexBuffer*, std::vector< IndexBuffer* > > parents;
-
-    m_dirty_buf_list.foreach_entry([&parents](IndexBufferPtr buf) {
+    auto parents_mapping_cb = [&parents](IndexBufferPtr buf) {
         // Add this buf to his children.
         parents[buf->m_up_buffer.get()].emplace_back(buf.get());
-    });
+    };
+    foreach_entry(m_dirty_buf_list, parents_mapping_cb);
 
-    m_dirty_buf_list.foreach_entry([&str, &parents](IndexBufferPtr buf) {
+    auto to_string_cb = [&str, &parents](IndexBufferPtr buf) {
         fmt::format_to(std::back_inserter(str), "{}", buf->to_string());
         auto first = true;
         for (const auto& p : parents[buf.get()]) {
@@ -110,7 +133,9 @@ std::string IndexCPContext::to_string() {
             fmt::format_to(std::back_inserter(str), " {}({})", r_cast< void* >(p), s_cast< int >(p->state()));
         }
         fmt::format_to(std::back_inserter(str), "\n");
-    });
+    };
+    foreach_entry(m_dirty_buf_list, to_string_cb);
+
     return str;
 }
 
@@ -123,11 +148,13 @@ void IndexCPContext::to_string_dot(const std::string& filename) {
     // Mapping from a node to all its parents in the graph.
     std::unordered_map< IndexBuffer*, std::vector< IndexBuffer* > > parents;
 
-    m_dirty_buf_list.foreach_entry([&parents](IndexBufferPtr buf) {
+    auto parents_mapping_cb = [&parents](IndexBufferPtr buf) {
         // Add this buf to his children.
         parents[buf->m_up_buffer.get()].emplace_back(buf.get());
-    });
-    m_dirty_buf_list.foreach_entry([&file, &parents, this](IndexBufferPtr buf) {
+    };
+    foreach_entry(m_dirty_buf_list, parents_mapping_cb);
+
+    auto to_string_dot_cb = [&file, &parents, this](IndexBufferPtr buf) {
         std::vector< std::string > colors = {"lightgreen", "lightcoral", "lightyellow"};
         auto sbuf = BtreeNode::to_string_buf(buf->raw_buffer());
         auto pos = sbuf.find("LEAF");
@@ -144,7 +171,8 @@ void IndexCPContext::to_string_dot(const std::string& filename) {
         for (const auto& p : parents[buf.get()]) {
             file << fmt::format("\"{}\" -> \"{}\";\n", r_cast< void* >(p), r_cast< void* >(buf.get()));
         }
-    });
+    };
+    foreach_entry(m_dirty_buf_list, to_string_dot_cb);
     file << "}\n";
 
     file.close();
@@ -155,9 +183,10 @@ uint16_t IndexCPContext::num_dags() {
     // count number of buffers whose up_buffers are nullptr
     uint16_t count = 0;
     std::unique_lock lg{m_flush_buffer_mtx};
-    m_dirty_buf_list.foreach_entry([&count](IndexBufferPtr buf) {
+    auto count_cb = [&count](IndexBufferPtr buf) {
         if (buf->m_up_buffer == nullptr) { count++; }
-    });
+    };
+    foreach_entry(m_dirty_buf_list, count_cb);
     return count;
 }
 
@@ -182,7 +211,7 @@ std::string IndexCPContext::to_string_with_dags() {
 
     std::unique_lock lg{m_flush_buffer_mtx};
     // Create the graph
-    m_dirty_buf_list.foreach_entry([&get_insert_buf, &group_roots](IndexBufferPtr buf) {
+    auto create_graph_cb = [&get_insert_buf, &group_roots](IndexBufferPtr buf) {
         if (buf->m_up_buffer == nullptr) {
             auto dgn = get_insert_buf(buf);
             group_roots.emplace_back(dgn);
@@ -191,7 +220,8 @@ std::string IndexCPContext::to_string_with_dags() {
             auto up_dgn = get_insert_buf(buf->m_up_buffer);
             up_dgn->down_nodes.emplace_back(dgn);
         }
-    });
+    };
+    foreach_entry(m_dirty_buf_list, create_graph_cb);
 
     // Now walk through the list of graphs and prepare formatted string
     std::string str{fmt::format("IndexCPContext cpid={} dirty_buf_count={} dirty_buf_list_size={} #_of_dags={}\n",

@@ -811,7 +811,7 @@ bool IndexWBCache::was_node_committed(IndexBufferPtr const& buf) {
 
 //////////////////// CP Related API section /////////////////////////////////
 folly::Future< bool > IndexWBCache::async_cp_flush(IndexCPContext* cp_ctx) {
-    LOGTRACEMOD(wbcache, "Starting Index CP Flush with cp \ndag={}", cp_ctx->to_string_with_dags());
+    LOGTRACEMOD(wbcache, "Starting Index CP Flush with cp \ndirty_list={}", cp_ctx->to_string_dirty_list());
     // #ifdef _PRERELEASE
     //     static int id = 0;
     //     auto filename = "cp_" + std::to_string(id++) + "_" + std::to_string(rand() % 100) + ".dot";
@@ -903,6 +903,7 @@ void IndexWBCache::do_flush_one_buf(IndexCPContext* cp_ctx, IndexBufferPtr const
                     buf->to_string());
         process_write_completion(cp_ctx, buf);
     } else {
+        LOGTRACEMOD(wbcache, "cp {} flushing buf {}", cp_ctx->id(), buf->to_string());
         m_vdev->async_write(r_cast< const char* >(buf->raw_buffer()), m_node_size, buf->m_blkid, part_of_batch)
             .thenValue([buf, cp_ctx](auto) {
                 try {
@@ -927,24 +928,28 @@ void IndexWBCache::process_write_completion(IndexCPContext* cp_ctx, IndexBufferP
     }
 #endif
 
-    LOGTRACEMOD(wbcache, "cp {} buf {}", cp_ctx->id(), buf->to_string());
+    LOGTRACEMOD(wbcache, "cp {} buf {}, dirty_buf_count {}", cp_ctx->id(), buf->to_string(), cp_ctx->m_dirty_buf_count.get());
     resource_mgr().dec_dirty_buf_size(m_node_size);
     m_updated_ordinals.insert(buf->m_index_ordinal);
     auto [next_buf, has_more] = on_buf_flush_done(cp_ctx, buf);
     if (next_buf) {
+        LOGTRACEMOD(wbcache, "cp {} next_buf {}, dirty_buf_count {}", cp_ctx->id(), next_buf->to_string(), cp_ctx->m_dirty_buf_count.get());
         do_flush_one_buf(cp_ctx, next_buf, false);
     } else if (!has_more) {
         for (const auto& ordinal : m_updated_ordinals) {
-            LOGTRACEMOD(wbcache, "Updating sb for ordinal {}", ordinal);
+            LOGTRACEMOD(wbcache, "Updating sb for ordinal {}, cp id {}", ordinal, cp_ctx->id());
             index_service().write_sb(ordinal);
         }
+        LOGTRACEMOD(wbcache, "cp {}, dirty_buf_count {}", cp_ctx->id(), cp_ctx->m_dirty_buf_count.get());
 
         // We are done flushing the buffers, We flush the vdev to persist the vdev bitmaps and free blks
         // Pick a CP Manager blocking IO fiber to execute the cp flush of vdev
         iomanager.run_on_forget(cp_mgr().pick_blocking_io_fiber(), [this, cp_ctx]() {
-            LOGTRACEMOD(wbcache, "Initiating CP flush");
+            auto cp_id = cp_ctx->id();
+            LOGTRACEMOD(wbcache, "Initiating CP flush for id {}", cp_id);
             m_vdev->cp_flush(cp_ctx); // This is a blocking io call
             cp_ctx->complete(true);
+            LOGTRACEMOD(wbcache, "Completed CP flush for id {}", cp_id);
         });
     }
 }
@@ -966,13 +971,14 @@ std::pair< IndexBufferPtr, bool > IndexWBCache::on_buf_flush_done_internal(Index
         std::lock_guard lg(buf->m_down_buffers_mtx);
         buf->m_down_buffers.clear();
     }
-#endif
-    buf->set_state(index_buf_state_t::CLEAN);
+#endif  
 
     if (cp_ctx->m_dirty_buf_count.decrement_testz()) {
+        buf->set_state(index_buf_state_t::CLEAN);
         return std::make_pair(nullptr, false);
     } else {
         get_next_bufs_internal(cp_ctx, 1u, buf, buf_list);
+        buf->set_state(index_buf_state_t::CLEAN);
         return std::make_pair((buf_list.size() ? buf_list[0] : nullptr), true);
     }
 }
@@ -1013,7 +1019,8 @@ void IndexWBCache::get_next_bufs_internal(IndexCPContext* cp_ctx, uint32_t max_c
         std::optional< IndexBufferPtr > buf = cp_ctx->next_dirty();
         if (!buf) { break; } // End of list
 
-        if ((*buf)->state() == index_buf_state_t::DIRTY && (*buf)->m_wait_for_down_buffers.testz()) {
+        if ((*buf)->state() == index_buf_state_t::DIRTY && (*buf)->m_dirtied_cp_id == cp_ctx->id()
+            && (*buf)->m_wait_for_down_buffers.testz()) {
             bufs.emplace_back(std::move(*buf));
             ++count;
         } else {
