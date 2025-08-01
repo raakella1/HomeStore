@@ -110,7 +110,7 @@ public:
             set_leaf(is_leaf);
             set_node_size(cfg.node_size());
         } else {
-            DEBUG_ASSERT_EQ(node_id(), id);
+           // DEBUG_ASSERT_EQ(node_id(), id);
             DEBUG_ASSERT_EQ(magic(), BTREE_NODE_MAGIC);
             DEBUG_ASSERT_EQ(version(), BTREE_NODE_VERSION);
         }

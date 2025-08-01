@@ -276,14 +276,18 @@ std::string IndexBuffer::to_string() const {
                            state_str[int_cast(state())], m_created_cp_id, m_dirtied_cp_id,
                            m_wait_for_down_buffers.get(), m_node_freed ? " Freed" : "", down_bufs);
     } else {
+        std::string node_str = (m_bytes == nullptr)
+                          ? "not attached yet"
+                          : fmt::format("node_m_bytes={} node=[{}]",
+                                        voidptr_cast(m_bytes),
+                                        r_cast< persistent_hdr_t const* >(m_bytes)->to_compact_string());
 
         return fmt::format(
-            "Buf={} index={} state={} create/dirty_cp={}/{} down_wait#={}{} up={} node=[{}] down={{{}}}",
+            "Buf={} index={} state={} create/dirty_cp={}/{} down_wait#={}{} up={} node=[{}] down={{{}}}, blkid {}",
             voidptr_cast(const_cast< IndexBuffer* >(this)), m_index_ordinal, state_str[int_cast(state())],
             m_created_cp_id, m_dirtied_cp_id, m_wait_for_down_buffers.get(), m_node_freed ? " Freed" : "",
             voidptr_cast(const_cast< IndexBuffer* >(m_up_buffer.get())),
-            (m_bytes == nullptr) ? "not attached yet" : r_cast< persistent_hdr_t const* >(m_bytes)->to_compact_string(),
-            down_bufs);
+            node_str, down_bufs, m_blkid.to_string());
     }
 }
 

@@ -155,6 +155,19 @@ retry:
 
     // Create the btree node out of buffer
     node = node_initializer(idx_buf);
+    if (node->node_id() != id) {
+        // If the node id is not same as requested, it means that we read a stale node, so retry
+        LOGTRACEMOD(wbcache, "read_buf: corrupt node read, id={} node_id={}, id_buf={}", id, node->node_id(), idx_buf->to_string());
+
+        auto const blkid1 = BlkId{node->node_id()};
+        auto idx_buf1 = std::make_shared< IndexBuffer >(blkid1, m_node_size, m_vdev->align_size());
+        m_vdev->sync_read(r_cast< char* >(idx_buf1->raw_buffer()), m_node_size, blkid1);
+        auto node1 = node_initializer(idx_buf1);
+        LOGTRACEMOD(wbcache, "read_buf:  new node id={}, id_buf={}", node1->node_id(), idx_buf1->to_string());
+
+        DEBUG_ASSERT_EQ(node->node_id(), id);
+    }
+    
 
     // Push the node into cache
     if (!m_in_recovery) {
@@ -188,7 +201,7 @@ bool IndexWBCache::get_writable_buf(const BtreeNodePtr& node, CPContext* context
         std::memcpy(new_buf->raw_buffer(), idx_buf->raw_buffer(), m_node_size);
 
         node->update_phys_buf(new_buf->raw_buffer());
-        LOGTRACEMOD(wbcache, "cp={} cur_buf={} for node={} is dirtied by cp={} copying new_buf={}", icp_ctx->id(),
+        LOGTRACEMOD(wbcache, "cp={} cur_buf={} for id={} is dirtied by cp={} copying new_buf={}", icp_ctx->id(),
                     static_cast< void* >(idx_buf.get()), node->node_id(), idx_buf->m_dirtied_cp_id,
                     static_cast< void* >(new_buf.get()));
         idx_buf = std::move(new_buf);
@@ -912,6 +925,9 @@ void IndexWBCache::do_flush_one_buf(IndexCPContext* cp_ctx, IndexBufferPtr const
     } else {
         if (buf->m_created_cp_id == cp_ctx->id()) {
             LOGTRACEMOD(wbcache, "Flushing cp {} new node buf {} blkid {}", cp_ctx->id(), buf->to_string(),
+                        buf->blkid().to_string());
+        } else {
+            LOGTRACEMOD(wbcache, "Flushing cp {} existing node buf {} blkid {}", cp_ctx->id(), buf->to_string(),
                         buf->blkid().to_string());
         }
         m_vdev->async_write(r_cast< const char* >(buf->raw_buffer()), m_node_size, buf->m_blkid, part_of_batch)
