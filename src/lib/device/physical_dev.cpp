@@ -138,6 +138,7 @@ void PhysicalDev::close_device() { close_and_uncache_dev(m_devname, m_iodev); }
 
 folly::Future< std::error_code > PhysicalDev::async_write(const char* data, uint32_t size, uint64_t offset,
                                                           bool part_of_batch) {
+    LOGINFO("Writing in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = get_current_time();
     return m_drive_iface->async_write(m_iodev.get(), data, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
@@ -150,6 +151,7 @@ folly::Future< std::error_code > PhysicalDev::async_write(const char* data, uint
 
 folly::Future< std::error_code > PhysicalDev::async_writev(const iovec* iov, int iovcnt, uint32_t size, uint64_t offset,
                                                            bool part_of_batch) {
+    LOGINFO("Writing in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = get_current_time();
     return m_drive_iface->async_writev(m_iodev.get(), iov, iovcnt, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
@@ -162,6 +164,7 @@ folly::Future< std::error_code > PhysicalDev::async_writev(const iovec* iov, int
 
 folly::Future< std::error_code > PhysicalDev::async_read(char* data, uint32_t size, uint64_t offset,
                                                          bool part_of_batch) {
+    LOGINFO("Reading in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = get_current_time();
     return m_drive_iface->async_read(m_iodev.get(), data, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
@@ -174,6 +177,7 @@ folly::Future< std::error_code > PhysicalDev::async_read(char* data, uint32_t si
 
 folly::Future< std::error_code > PhysicalDev::async_readv(iovec* iov, int iovcnt, uint32_t size, uint64_t offset,
                                                           bool part_of_batch) {
+    LOGINFO("Reading in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = get_current_time();
     return m_drive_iface->async_readv(m_iodev.get(), iov, iovcnt, size, offset, part_of_batch)
         .thenValue([this, start_time, size](std::error_code ec) {
@@ -220,6 +224,7 @@ std::error_code PhysicalDev::sync_writev(const iovec* iov, int iovcnt, uint32_t 
 }
 
 std::error_code PhysicalDev::sync_read(char* data, uint32_t size, uint64_t offset) {
+    LOGINFO("Reading in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = Clock::now();
     auto const ret = m_drive_iface->sync_read(m_iodev.get(), data, size, offset);
     HISTOGRAM_OBSERVE(m_metrics, drive_read_latency, get_elapsed_time_us(start_time));
@@ -229,6 +234,7 @@ std::error_code PhysicalDev::sync_read(char* data, uint32_t size, uint64_t offse
 }
 
 std::error_code PhysicalDev::sync_readv(iovec* iov, int iovcnt, uint32_t size, uint64_t offset) {
+    LOGINFO("Reading in device: {}, pdev id {}, offset = {}, size = {}", m_devname, pdev_id(), offset, size);
     auto const start_time = Clock::now();
     auto const ret = m_drive_iface->sync_readv(m_iodev.get(), iov, iovcnt, size, offset);
     HISTOGRAM_OBSERVE(m_metrics, drive_read_latency, get_elapsed_time_us(start_time));

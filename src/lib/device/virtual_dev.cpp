@@ -381,6 +381,7 @@ folly::Future< std::error_code > VirtualDev::async_write(const char* buf, uint32
         return folly::makeFuture< std::error_code >(std::make_error_code(std::errc::resource_unavailable_try_again));
     }
     auto* pdev = chunk->physical_dev_mutable();
+    LOGINFO("Writing in device: {}, offset = {}, size = {}, blkid: {}, int blkid {}", pdev->pdev_id(), dev_offset, size, bid.to_string(), bid.to_integer());
 
     HS_LOG(TRACE, device, "Writing in device: {}, offset = {}, size ={}", pdev->pdev_id(), dev_offset, size);
     COUNTER_INCREMENT(m_metrics, vdev_write_count, 1);
@@ -569,6 +570,8 @@ std::error_code VirtualDev::sync_read(char* buf, uint32_t size, BlkId const& bid
 
     Chunk* chunk;
     uint64_t const dev_offset = to_dev_offset(bid, &chunk);
+    LOGINFO("Reading in device: {}, offset = {}, size = {}, blkid: {}, int blkid {}", chunk->physical_dev()->pdev_id(),
+           dev_offset, size, bid.to_string(), bid.to_integer());
     if (sisl_unlikely(dev_offset == INVALID_DEV_OFFSET)) {
         return std::make_error_code(std::errc::resource_unavailable_try_again);
     }

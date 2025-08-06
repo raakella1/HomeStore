@@ -927,8 +927,7 @@ void IndexWBCache::do_flush_one_buf(IndexCPContext* cp_ctx, IndexBufferPtr const
             LOGTRACEMOD(wbcache, "Flushing cp {} new node buf {} blkid {}", cp_ctx->id(), buf->to_string(),
                         buf->blkid().to_string());
         } else {
-            LOGTRACEMOD(wbcache, "Flushing cp {} existing node buf {} blkid {}", cp_ctx->id(), buf->to_string(),
-                        buf->blkid().to_string());
+            LOGTRACEMOD(wbcache, "Flushing cp {} existing node buf {}", cp_ctx->id(), buf->to_string());
         }
         m_vdev->async_write(r_cast< const char* >(buf->raw_buffer()), m_node_size, buf->m_blkid, part_of_batch)
             .thenValue([buf, cp_ctx](auto) {
