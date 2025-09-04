@@ -472,6 +472,10 @@ void Btree< K, V >::validate_sanity_child(const BtreeNodePtr& parent_node, uint3
     for (uint32_t i = 0; i < child_node->total_entries(); ++i) {
         K cur_child_key = child_node->get_nth_key< K >(i, false);
         if(ind < parent_node->total_entries()){
+            auto cmp = cur_child_key.compare(parent_key);
+            if (cmp > 0) {
+                LOGWARN("child {} {}-th key is greater than its parent's {} {}-th key", child_node->to_string(), i , parent_node->to_string(), ind);
+            }
             BT_REL_ASSERT_LE(cur_child_key.compare(parent_key), 0, " child {} {}-th key is greater than its parent's {} {}-th key", child_node->to_string(), i , parent_node->to_string(), ind);
             if(ind>0) {
                 if(cur_child_key.compare(previous_parent_key) <= 0){
