@@ -262,48 +262,39 @@ TEST_F(WbCacheRaceTest, CapturedMemVecIsAlwaysOneOfTwoValidValues) {
 }
 
 // ---------------------------------------------------------------------------
-// FLIP-backed sub-test (requires _PRERELEASE build)
+// FLIP location tests (require _PRERELEASE build)
 //
-// Confirms that the FLIP point "wb_flush_before_m_mem_read" fires between
-// the dependent_cnt decrement and the m_mem read, allowing deterministic
-// race window widening in integration scenarios.
+// Confirm that each Race A FLIP point fires inside the production function,
+// not just when called externally.  Uses a shot-counting pattern:
+//   1. Register exactly 2 shots.
+//   2. Call the production function once — it consumes shot 1.
+//   3. First manual test_flip call gets shot 2  → true  (EXPECT_TRUE).
+//   4. Second manual test_flip call finds nothing → false (EXPECT_FALSE).
+// If the production function did NOT fire the flip, both shots survive and
+// the second manual call returns true, failing EXPECT_FALSE.
 // ---------------------------------------------------------------------------
 #ifdef _PRERELEASE
 
-static std::atomic< bool > g_flip_fired{false};
-
-static void simulated_flush_path_with_flip(MockWbReq& req) {
-    if (homestore_flip->test_flip("wb_cache_get_memvec_before_use")) {
-        g_flip_fired = true;
-    }
-    boost::intrusive_ptr< MemVector > captured;
-    {
-#ifndef SIMULATE_WB_MEM_RACE
-        std::unique_lock< std::mutex > lk(req.mtx);
-#endif
-        captured = req.m_mem;
-    }
-    EXPECT_NE(captured.get(), nullptr);
-}
-
-TEST_F(WbCacheRaceTest, FlipPointFiresAtCorrectLocation) {
+// Verifies that insert_missing_pieces() fires wb_cache_get_memvec_before_use
+// inside the function body (at the window-widening point for Race A).
+TEST_F(CacheBufRaceTest, InsertMissingPiecesFlipFiresAtCorrectLocation) {
     using namespace homestore;
     flip::FlipClient fc{HomeStoreFlip::instance()};
-
     flip::FlipCondition null_cond;
     flip::FlipFrequency freq;
-    freq.set_count(10);
+    freq.set_count(2);
     freq.set_percent(100);
+    fc.inject_delay_flip("wb_cache_get_memvec_before_use", {null_cond}, freq, 1 /* ignored, source sleeps */);
 
-    fc.inject_delay_flip("wb_cache_get_memvec_before_use", {null_cond}, freq, 1000 /* 1 ms */);
+    CacheBuffer< MinKey > buf;
+    buf.set_memvec(make_memvec(), 0, 8192);
+    std::vector< std::pair< uint32_t, uint32_t > > missing;
+    buf.insert_missing_pieces(0, 8192, missing);
 
-    auto mv = make_memvec();
-    MockWbReq req(mv);
-    g_flip_fired = false;
-
-    simulated_flush_path_with_flip(req);
-
-    EXPECT_TRUE(g_flip_fired) << "FLIP point wb_cache_get_memvec_before_use did not fire";
+    const bool manual1 = homestore_flip->test_flip("wb_cache_get_memvec_before_use");
+    const bool manual2 = homestore_flip->test_flip("wb_cache_get_memvec_before_use");
+    EXPECT_TRUE(manual1) << "flip was never registered (both shots unused)";
+    EXPECT_FALSE(manual2) << "FLIP wb_cache_get_memvec_before_use did not fire in insert_missing_pieces";
 }
 
 // Confirms the second vulnerable get_memvec() path — update_missing_piece —
