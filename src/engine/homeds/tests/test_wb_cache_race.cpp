@@ -156,6 +156,66 @@ TEST_F(CacheBufRaceTest, InsertMissingPiecesRaceFreeUnderConcurrentSetMemvec) {
     reader.join();
 }
 
+// Simulates the production crash path from the verify_csum / refresh_node stack:
+//
+//   refresh_node → at_offset(0) → blob.bytes → CRC loop
+//
+// Without the fix, at_offset() reads m_mem raw (no lock), gets a raw MemVector
+// pointer.  The concurrent writer calls set_memvec(make_memvec(), ...) with no
+// local ref, so when m_mem is replaced the old MemVector's refcount drops to 0
+// and tcmalloc reclaims it — writing a free-list "next" pointer into the first
+// 8 bytes.  The reader then dereferences blob.bytes (pointing into freed memory),
+// corrupting tcmalloc's heap.  The next tc_new() call crashes at linked_list.h:66.
+//
+// With the fix, the shared_lock snapshot bumps the refcount before the lock is
+// released, keeping the MemVector alive through the entire blob.bytes read.
+//
+// To reproduce the crash:
+//   In cache.h at_offset(), comment out the shared_lock block and replace with:
+//     auto mv = m_mem;
+//     auto data_offset = m_data_offset;
+//   Build with -D_PRERELEASE=ON, then run this test.
+TEST_F(CacheBufRaceTest, AtOffsetRaceFreeUnderConcurrentSetMemvec) {
+    constexpr int kIterations = 2000;
+#ifdef _PRERELEASE
+    {
+        using namespace homestore;
+        flip::FlipClient fc{HomeStoreFlip::instance()};
+        flip::FlipCondition null_cond;
+        flip::FlipFrequency freq;
+        freq.set_count(kIterations * 2);
+        freq.set_percent(100);
+        fc.inject_delay_flip("cache_buf_at_offset_before_use", {null_cond}, freq, 100 /* ignored */);
+    }
+#endif
+    homestore::CacheBuffer< MinKey > buf;
+    buf.set_memvec(make_memvec(), 0, 8192);
+
+    std::thread writer([&] {
+        for (int i = 0; i < kIterations; ++i)
+            buf.set_memvec(make_memvec(), 0, 8192);
+    });
+
+    std::thread reader([&] {
+        for (int i = 0; i < kIterations; ++i) {
+            sisl::blob b = buf.at_offset(0);
+            // Simulate verify_csum: CRC loop over blob.bytes.
+            // volatile forces the dereference — dangling ptr causes tcmalloc
+            // heap corruption that crashes tc_new on a subsequent allocation.
+            if (b.bytes != nullptr && b.size >= sizeof(uint64_t)) {
+                volatile uint64_t csum = 0;
+                const uint64_t* words = reinterpret_cast< const uint64_t* >(b.bytes);
+                for (uint32_t j = 0; j < b.size / sizeof(uint64_t); ++j)
+                    csum ^= words[j];
+                (void)csum;
+            }
+        }
+    });
+
+    writer.join();
+    reader.join();
+}
+
 // ============================================================================
 // Race B — writeback_req::m_mem
 // ============================================================================
@@ -295,6 +355,28 @@ TEST_F(CacheBufRaceTest, InsertMissingPiecesFlipFiresAtCorrectLocation) {
     const bool manual2 = homestore_flip->test_flip("wb_cache_get_memvec_before_use");
     EXPECT_TRUE(manual1) << "flip was never registered (both shots unused)";
     EXPECT_FALSE(manual2) << "FLIP wb_cache_get_memvec_before_use did not fire in insert_missing_pieces";
+}
+
+// Verifies that at_offset() fires cache_buf_at_offset_before_use inside the
+// function body (the window-widening point that makes the verify_csum race
+// deterministic in integration scenarios).
+TEST_F(CacheBufRaceTest, AtOffsetFlipFiresAtCorrectLocation) {
+    using namespace homestore;
+    flip::FlipClient fc{HomeStoreFlip::instance()};
+    flip::FlipCondition null_cond;
+    flip::FlipFrequency freq;
+    freq.set_count(2);
+    freq.set_percent(100);
+    fc.inject_delay_flip("cache_buf_at_offset_before_use", {null_cond}, freq, 1 /* ignored */);
+
+    CacheBuffer< MinKey > buf;
+    buf.set_memvec(make_memvec(), 0, 8192);
+    buf.at_offset(0);
+
+    const bool manual1 = homestore_flip->test_flip("cache_buf_at_offset_before_use");
+    const bool manual2 = homestore_flip->test_flip("cache_buf_at_offset_before_use");
+    EXPECT_TRUE(manual1) << "flip was never registered (both shots unused)";
+    EXPECT_FALSE(manual2) << "FLIP cache_buf_at_offset_before_use did not fire in at_offset";
 }
 
 // Confirms the second vulnerable get_memvec() path — update_missing_piece —

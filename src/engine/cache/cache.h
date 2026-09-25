@@ -392,6 +392,11 @@ public:
             mv = m_mem;
             data_offset = m_data_offset;
         }
+#ifdef _PRERELEASE
+        if (homestore_flip->test_flip("cache_buf_at_offset_before_use")) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+#endif
         sisl::blob b;
         b.bytes = nullptr;
         b.size = 0;
